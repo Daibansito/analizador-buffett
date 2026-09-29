@@ -2,6 +2,7 @@ import streamlit as st
 import yfinance as yf
 import pandas as pd
 import plotly.graph_objects as go
+import requests
 
 # Configuración de pantalla
 st.set_page_config(
@@ -18,8 +19,8 @@ st.sidebar.header("Buscar Empresa")
 ticker_input = st.sidebar.text_input(
     "Ticker de la acción (EE. UU.):",
     value="WEYS",
-    help="Escribe el símbolo bursátil: WEYS, HRTG, FLXS, UVE, etc."
-).strip().upper()
+    help="Escribe el símbolo exacto sin símbolos raros: WEYS, HRTG, AAPL, UVE"
+).strip().upper().replace("$", "")
 
 # Botones de acceso rápido
 st.sidebar.markdown("**Accesos directos:**")
@@ -33,7 +34,13 @@ if col_b3.button("UVE"):
 
 @st.cache_resource(ttl=3600)
 def obtener_datos(ticker):
-    stock = yf.Ticker(ticker)
+    # Sesión personalizada para esquivar el bloqueo 401 / Invalid Crumb de Yahoo
+    session = requests.Session()
+    session.headers.update({
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    })
+    
+    stock = yf.Ticker(ticker, session=session)
     info = stock.info
     divs = stock.dividends
     hist = stock.history(period="5y")
@@ -132,10 +139,10 @@ if ticker_input:
                             marker_color='#2ca02c'
                         ))
                         fig.update_layout(title="Últimos pagos (Detecta picos extraordinarios)", height=320)
-                        st.plotly_chart(fig, use_container_width=True)
+                        st.plotly_chart(fig, width='stretch')
                     with g_col2:
                         st.write("Historial reciente:")
-                        st.dataframe(df_divs.head(8), hide_index=True, use_container_width=True)
+                        st.dataframe(df_divs.head(8), hide_index=True, width='stretch')
                 else:
                     st.info("Esta empresa no tiene historial de dividendos.")
 
@@ -144,7 +151,7 @@ if ticker_input:
                     fig_p = go.Figure()
                     fig_p.add_trace(go.Scatter(x=hist_precios.index, y=hist_precios['Close'], mode='lines', name='Cierre'))
                     fig_p.update_layout(height=350, yaxis_title="Precio ($)")
-                    st.plotly_chart(fig_p, use_container_width=True)
+                    st.plotly_chart(fig_p, width='stretch')
 
             with tab_detalles:
                 col_d1, col_d2 = st.columns(2)
