@@ -6,7 +6,7 @@ import pandas as pd
 # Configuración de página
 st.set_page_config(
     page_title="Analizador Fundamental 'Estilo Buffett'",
-    page_icon="🛡️️",
+    page_icon="🛡",
     layout="wide"
 )
 
@@ -33,7 +33,7 @@ def obtener_datos(simbolo):
     except Exception:
         pass
     
-    # Si .info fue bloqueado (401) o viene vacío, usamos fast_info
+    # Si .info falla por bloqueo (401) o viene vacío, usamos fast_info
     if not info or len(info) < 5:
         try:
             fi = ticker.fast_info
@@ -50,7 +50,7 @@ def obtener_datos(simbolo):
         except Exception:
             info = {}
             
-    return info, ticker
+    return info
 
 def formato_numero(num, es_moneda=False, simbolo_moneda="$"):
     if num is None or pd.isna(num):
@@ -74,13 +74,13 @@ st.sidebar.markdown("**Ejemplos populares:**")
 st.sidebar.caption("META, AAPL, MSFT, GOOGL, NVDA, WEYS")
 
 # --- CABECERA PRINCIPAL ---
-st.title("🛡️ Analizador Fundamental 'Estilo Buffett'")
+st.title("🛡️️ Analizador Fundamental 'Estilo Buffett'")
 st.caption("Filtro de solvencia, ventajas competitivas, PER y múltiplos de valoración.")
 st.markdown("---")
 
 if ticker_input:
     with st.spinner(f"Cargando datos para {ticker_input}..."):
-        info, ticker_obj = obtener_datos(ticker_input)
+        info = obtener_datos(ticker_input)
 
     if not info or (not info.get('currentPrice') and not info.get('regularMarketPrice')):
         st.error(f"No se pudieron cargar los datos para '{ticker_input}'. Comprueba que el símbolo sea correcto y vuelve a intentarlo.")
