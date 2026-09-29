@@ -12,14 +12,14 @@ st.set_page_config(
 )
 
 st.title("🛡️ Analizador Fundamental 'Estilo Buffett'")
-st.caption("Filtro de solvencia, generación de caja real y múltiplos en tiempo real.")
+st.caption("Filtro de solvencia, generación de caja real, dictamen experto y valoración de Small Caps.")
 
 # Barra lateral para buscar acciones
 st.sidebar.header("Buscar Empresa")
 ticker_input = st.sidebar.text_input(
     "Ticker de la acción (EE. UU.):",
     value="WEYS",
-    help="Escribe el símbolo exacto sin símbolos raros: WEYS, HRTG, AAPL, UVE"
+    help="Escribe el símbolo exacto: WEYS, HRTG, FLXS, UVE, AAPL"
 ).strip().upper().replace("$", "")
 
 # Botones de acceso rápido
@@ -32,9 +32,14 @@ if col_b2.button("HRTG"):
 if col_b3.button("UVE"):
     ticker_input = "UVE"
 
+# Enlaces externos rápidos
+if ticker_input:
+    st.sidebar.markdown("---")
+    st.sidebar.markdown(f"🔗 [Ver ficha en Investing.com](https://es.investing.com/search/?q={ticker_input})")
+    st.sidebar.markdown(f"🔗 [Ver ficha en Yahoo Finance](https://finance.yahoo.com/quote/{ticker_input})")
+
 @st.cache_resource(ttl=3600)
 def obtener_datos(ticker):
-    # Sesión personalizada para esquivar el bloqueo 401 / Invalid Crumb de Yahoo
     session = requests.Session()
     session.headers.update({
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
@@ -45,6 +50,48 @@ def obtener_datos(ticker):
     divs = stock.dividends
     hist = stock.history(period="5y")
     return stock, info, divs, hist
+
+def generar_opinion_experta(nombre, per, deuda_neta, fcf, current_ratio, div_yield, cap_mercado):
+    """Genera un análisis fundamental cualitativo estilo Buffett/Munger."""
+    analisis = []
+    
+    # 1. Evaluación de Rentabilidad / Múltiplos
+    if per is None or per <= 0:
+        analisis.append("⚠️ **Beneficios en negativo:** La compañía reporta pérdidas contables en los últimos 12 meses. Desde el prisma de Buffett, entrar aquí implica asumir riesgo de giro (*turnaround*) o ciclo recesivo no superado.")
+    elif per < 8:
+        analisis.append(f"🟢 **Múltiplo de Valor Profundo (PER {per:.1f}x):** Cotiza con un descuento severo frente al mercado. Si el modelo es recurrente, ofrece un margen de seguridad amplio frente a caídas.")
+    elif per <= 14:
+        analisis.append(f"🔵 **Valoración Razonable (PER {per:.1f}x):** Precio equilibrado. No es una ganga extrema, pero encaja en la máxima de 'comprar una empresa buena a un precio justo'.")
+    else:
+        analisis.append(f"🟠 **Múltiplo Exigente (PER {per:.1f}x):** Cotiza sin holgura de valoración para una empresa de este tamaño. El margen de seguridad es reducido ante un trimestre flojo.")
+
+    # 2. Evaluación de Solvencia y Balance
+    if deuda_neta <= 0:
+        analisis.append(f"🟢 **Fortaleza Financiera Sobresaliente:** Dispone de caja neta (+${abs(deuda_neta):.1f}M). No depende de la banca ni de refinanciaciones caras, eliminando el riesgo de quiebra.")
+    elif deuda_neta < (fcf * 3) if fcf > 0 else False:
+        analisis.append(f"🔵 **Deuda Gestionable:** La deuda neta (${deuda_neta:.1f}M) está respaldada por su generación de caja operativa.")
+    else:
+        analisis.append(f"🔴 **Apalancamiento Considerables:** La deuda neta de ${deuda_neta:.1f}M compromete la flexibilidad del negocio frente a subidas de tipos o contracción de márgenes.")
+
+    # 3. Flujo de Caja y Dividendos
+    if fcf > 0 and div_yield > 2.5:
+        analisis.append(f"🟢 **Retorno Efectivo al Accionista:** Genera flujo de caja libre positivo (+${fcf:.1f}M) que financia de manera orgánica un dividendo de {div_yield:.2f}%.")
+    elif fcf > 0:
+        analisis.append(f"🔵 **Generador de Caja:** Genera FCF positivo (+${fcf:.1f}M), lo que le permite reinvertir en el negocio sin emitir nuevas acciones ni endeudarse.")
+    else:
+        analisis.append(f"🔴 **Déficit de Flujo Libre:** Registra FCF negativo. El beneficio contable no se está traduciendo en dinero real en cuenta corriente.")
+
+    # Conclusión / Veredicto
+    if (per is not None and 0 < per <= 12) and deuda_neta <= 0 and fcf > 0:
+        veredicto = "🌟 **Oportunidad de Calidad / Valor (Candidata Buffett pura)**: Cumple los tres pilares esenciales: barata por múltiplos, sin deuda neta y con caja libre positiva."
+    elif (per is not None and per > 0) and deuda_neta <= 0 and fcf > 0:
+        veredicto = "🛡️ **Negocio Sólido pero Precio No Barato**: Compañía financieramente intachable, ideal para esperar recortes o consolidaciones de precio antes de entrar."
+    elif per is None or per <= 0:
+        veredicto = "🚫 **Descarte Preventivo / Esperar Giro**: En pérdidas operativas. Mantener en lista de seguimiento hasta que recupere beneficios netos recurrentes."
+    else:
+        veredicto = "⚖️ **Perfil Mixto / Análisis Detallado Requerido**: Presenta áreas favorables combinadas con endeudamiento o márgenes ajustados."
+
+    return veredicto, analisis
 
 if ticker_input:
     with st.spinner(f"Analizando balance y dividendos de {ticker_input}..."):
@@ -70,13 +117,25 @@ if ticker_input:
             st.subheader(f"{nombre} ({ticker_input})")
             st.write(f"**Sector:** {sector} | **Industria:** {industria}")
 
-            # Fila de métricas principales
+            # Métricas principales
             m1, m2, m3, m4, m5 = st.columns(5)
             m1.metric("Precio Actual", f"${precio_actual:,.2f}")
             m2.metric("Cap. Mercado", f"${cap_mercado:,.1f} M")
             m3.metric("PER (TTM)", f"{per_ttm:.1f}x" if per_ttm else "En pérdidas")
             m4.metric("VE / EBITDA", f"{ev_ebitda:.1f}x" if ev_ebitda else "N/D")
             m5.metric("Rent. Dividendo", f"{dividend_yield:.2f}%" if dividend_yield > 0 else "0.00%")
+
+            st.markdown("---")
+            
+            # SECCIÓN NUEVA: OPINIÓN EXPERTA BUFFETT
+            st.subheader("🧐 Dictamen Experto de Inversión")
+            veredicto, puntos_analisis = generar_opinion_experta(
+                nombre, per_ttm, deuda_neta, fcf, current_ratio, dividend_yield, cap_mercado
+            )
+            
+            st.info(veredicto)
+            for punto in puntos_analisis:
+                st.write(punto)
 
             st.markdown("---")
             st.subheader("🚦 El Semáforo Buffett (Calidad y Seguridad)")
