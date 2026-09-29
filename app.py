@@ -6,13 +6,13 @@ import requests
 
 # Configuración de pantalla
 st.set_page_config(
-    page_title="Buffett Value Screener",
+    page_title="Buffett Value Screener Pro",
     page_icon="📈",
     layout="wide"
 )
 
 st.title("🛡️ Analizador Fundamental 'Estilo Buffett'")
-st.caption("Filtro de solvencia, generación de caja real, dictamen experto y valoración de Small Caps.")
+st.caption("Filtro de solvencia, ventajas competitivas, previsiones de beneficios y valoración intrínseca.")
 
 # Barra lateral para buscar acciones
 st.sidebar.header("Buscar Empresa")
@@ -51,57 +51,48 @@ def obtener_datos(ticker):
     hist = stock.history(period="5y")
     return stock, info, divs, hist
 
-def generar_opinion_experta(nombre, per, deuda_neta, fcf, current_ratio, div_yield, cap_mercado):
-    """Genera un análisis fundamental cualitativo estilo Buffett/Munger."""
-    analisis = []
-    
-    # 1. Evaluación de Rentabilidad / Múltiplos
-    if per is None or per <= 0:
-        analisis.append("⚠️ **Beneficios en negativo:** La compañía reporta pérdidas contables en los últimos 12 meses. Desde el prisma de Buffett, entrar aquí implica asumir riesgo de giro (*turnaround*) o ciclo recesivo no superado.")
-    elif per < 8:
-        analisis.append(f"🟢 **Múltiplo de Valor Profundo (PER {per:.1f}x):** Cotiza con un descuento severo frente al mercado. Si el modelo es recurrente, ofrece un margen de seguridad amplio frente a caídas.")
-    elif per <= 14:
-        analisis.append(f"🔵 **Valoración Razonable (PER {per:.1f}x):** Precio equilibrado. No es una ganga extrema, pero encaja en la máxima de 'comprar una empresa buena a un precio justo'.")
-    else:
-        analisis.append(f"🟠 **Múltiplo Exigente (PER {per:.1f}x):** Cotiza sin holgura de valoración para una empresa de este tamaño. El margen de seguridad es reducido ante un trimestre flojo.")
+def analizar_foso_y_riesgos(sector, deuda_neta, fcf, margin_ebitda, current_ratio):
+    """Genera fortalezas (Moat) y debilidades según el balance y sector."""
+    ventajas = []
+    desventajas = []
 
-    # 2. Evaluación de Solvencia y Balance
+    # Ventajas Competitivas
     if deuda_neta <= 0:
-        analisis.append(f"🟢 **Fortaleza Financiera Sobresaliente:** Dispone de caja neta (+${abs(deuda_neta):.1f}M). No depende de la banca ni de refinanciaciones caras, eliminando el riesgo de quiebra.")
-    elif deuda_neta < (fcf * 3) if fcf > 0 else False:
-        analisis.append(f"🔵 **Deuda Gestionable:** La deuda neta (${deuda_neta:.1f}M) está respaldada por su generación de caja operativa.")
-    else:
-        analisis.append(f"🔴 **Apalancamiento Considerables:** La deuda neta de ${deuda_neta:.1f}M compromete la flexibilidad del negocio frente a subidas de tipos o contracción de márgenes.")
+        ventajas.append("🛡️ **Balance Blindado:** Caja neta positiva. Puede recomprar acciones, pagar dividendos o adquirir rivales débiles en recesión sin pedir crédito.")
+    if fcf > 0:
+        ventajas.append("💰 **Generación Real de Flujo Libre:** El beneficio neto se traduce en liquidez tangible, protegiendo a la empresa de suspensiones de dividendo.")
+    if margin_ebitda and margin_ebitda > 0.15:
+        ventajas.append(f"📊 **Poder de Fijación de Precios:** Margen EBITDA saludable ({margin_ebitda*100:.1f}%), síntoma de costes controlados o marca reconocida.")
+    if "Insurance" in sector or "Financial" in sector:
+        ventajas.append("🏦 **Float Financiero:** Capta liquidez por adelantado antes de abonar siniestros, generando rendimiento sobre el saldo invertido.")
+    elif "Consumer" in sector:
+        ventajas.append("👟 **Resiliencia de Cartera:** Marcas asentadas en nichos de consumo recurrente con lealtad de clientes.")
 
-    # 3. Flujo de Caja y Dividendos
-    if fcf > 0 and div_yield > 2.5:
-        analisis.append(f"🟢 **Retorno Efectivo al Accionista:** Genera flujo de caja libre positivo (+${fcf:.1f}M) que financia de manera orgánica un dividendo de {div_yield:.2f}%.")
-    elif fcf > 0:
-        analisis.append(f"🔵 **Generador de Caja:** Genera FCF positivo (+${fcf:.1f}M), lo que le permite reinvertir en el negocio sin emitir nuevas acciones ni endeudarse.")
-    else:
-        analisis.append(f"🔴 **Déficit de Flujo Libre:** Registra FCF negativo. El beneficio contable no se está traduciendo en dinero real en cuenta corriente.")
+    # Desventajas y Riesgos
+    if deuda_neta > 0:
+        desventajas.append(f"⚠️ **Carga Financiera:** Tiene una deuda neta de ${deuda_neta:.1f}M que condiciona el flujo libre de caja ante tipos altos.")
+    if fcf <= 0:
+        desventajas.append("🔴 **Consumo de Caja:** No genera flujo de caja libre positivo; depende de reservas previas o financiación ajena.")
+    if "Insurance" in sector:
+        desventajas.append("🌪️ **Riesgo Climatológico/Catastrófico:** Temporadas severas de huracanes o tormentas pueden disparar el ratio combinado y mermar reservas.")
+    elif "Cyclical" in sector or "Industrial" in sector:
+        desventajas.append("📉 **Exposición Cíclica:** Alta sensibilidad a la desaceleración del PIB, fletes y costes de materias primas.")
+    if current_ratio and current_ratio < 1.3:
+        desventajas.append(f"⚠️ **Liquidez Justa:** Cobertura de pasivos a corto plazo ajustada ({current_ratio:.2f}x).")
 
-    # Conclusión / Veredicto
-    if (per is not None and 0 < per <= 12) and deuda_neta <= 0 and fcf > 0:
-        veredicto = "🌟 **Oportunidad de Calidad / Valor (Candidata Buffett pura)**: Cumple los tres pilares esenciales: barata por múltiplos, sin deuda neta y con caja libre positiva."
-    elif (per is not None and per > 0) and deuda_neta <= 0 and fcf > 0:
-        veredicto = "🛡️ **Negocio Sólido pero Precio No Barato**: Compañía financieramente intachable, ideal para esperar recortes o consolidaciones de precio antes de entrar."
-    elif per is None or per <= 0:
-        veredicto = "🚫 **Descarte Preventivo / Esperar Giro**: En pérdidas operativas. Mantener en lista de seguimiento hasta que recupere beneficios netos recurrentes."
-    else:
-        veredicto = "⚖️ **Perfil Mixto / Análisis Detallado Requerido**: Presenta áreas favorables combinadas con endeudamiento o márgenes ajustados."
-
-    return veredicto, analisis
+    return ventajas, desventajas
 
 if ticker_input:
-    with st.spinner(f"Analizando balance y dividendos de {ticker_input}..."):
+    with st.spinner(f"Analizando balance, previsiones y modelo de negocio de {ticker_input}..."):
         try:
             stock, info, hist_divs, hist_precios = obtener_datos(ticker_input)
             
             nombre = info.get("shortName", ticker_input)
             sector = info.get("sector", "N/D")
             industria = info.get("industry", "N/D")
+            resumen_negocio = info.get("longBusinessSummary", "No hay descripción detallada disponible.")
             
+            # Métricas actuales
             precio_actual = info.get("currentPrice") or info.get("regularMarketPrice") or 0.0
             cap_mercado = (info.get("marketCap") or 0) / 1e6
             per_ttm = info.get("trailingPE")
@@ -109,15 +100,24 @@ if ticker_input:
             fcf = (info.get("freeCashflow") or 0) / 1e6
             dividend_yield = (info.get("dividendYield") or 0) * 100
             
+            # Previsiones y Ratios Futuros (Forward Metrics)
+            forward_pe = info.get("forwardPE")
+            forward_eps = info.get("forwardEps")
+            trailing_eps = info.get("trailingEps")
+            peg_ratio = info.get("pegRatio")
+            rev_growth = info.get("revenueGrowth")
+            
+            # Balance
             deuda_total = info.get("totalDebt") or 0
             caja_total = info.get("totalCash") or 0
             deuda_neta = (deuda_total - caja_total) / 1e6
             current_ratio = info.get("currentRatio")
+            margin_ebitda = info.get("ebitdaMargins")
 
             st.subheader(f"{nombre} ({ticker_input})")
             st.write(f"**Sector:** {sector} | **Industria:** {industria}")
 
-            # Métricas principales
+            # FILA 1: Métricas de Valoración y Mercado Actuales
             m1, m2, m3, m4, m5 = st.columns(5)
             m1.metric("Precio Actual", f"${precio_actual:,.2f}")
             m2.metric("Cap. Mercado", f"${cap_mercado:,.1f} M")
@@ -125,24 +125,48 @@ if ticker_input:
             m4.metric("VE / EBITDA", f"{ev_ebitda:.1f}x" if ev_ebitda else "N/D")
             m5.metric("Rent. Dividendo", f"{dividend_yield:.2f}%" if dividend_yield > 0 else "0.00%")
 
-            st.markdown("---")
+            # FILA 2: Métricas de Previsión Futura
+            st.markdown("##### 🔮 Previsión de Beneficios y Múltiplos Futuros")
+            p1, p2, p3, p4 = st.columns(4)
             
-            # SECCIÓN NUEVA: OPINIÓN EXPERTA BUFFETT
-            st.subheader("🧐 Dictamen Experto de Inversión")
-            veredicto, puntos_analisis = generar_opinion_experta(
-                nombre, per_ttm, deuda_neta, fcf, current_ratio, dividend_yield, cap_mercado
-            )
+            # Variación esperada del EPS
+            delta_eps = None
+            if forward_eps and trailing_eps and trailing_eps != 0:
+                delta_eps = f"{((forward_eps - trailing_eps) / abs(trailing_eps)) * 100:+.1f}% vs actual"
             
-            st.info(veredicto)
-            for punto in puntos_analisis:
-                st.write(punto)
+            p1.metric("Forward P/E (Esperado)", f"{forward_pe:.1f}x" if forward_pe else "N/D", 
+                      delta=f"{(forward_pe - per_ttm):.1f}x" if (forward_pe and per_ttm) else None, delta_color="inverse")
+            p2.metric("BPA Previsto (Forward EPS)", f"${forward_eps:.2f}" if forward_eps else "N/D", delta=delta_eps)
+            p3.metric("Ratio PEG (Precio/Crecimiento)", f"{peg_ratio:.2f}" if peg_ratio else "N/D",
+                      help="Un PEG < 1.0 indica que cotiza por debajo de su tasa de crecimiento esperada.")
+            p4.metric("Crecimiento de Ingresos", f"{rev_growth*100:+.1f}%" if rev_growth else "N/D")
 
             st.markdown("---")
-            st.subheader("🚦 El Semáforo Buffett (Calidad y Seguridad)")
 
+            # SECCIÓN 3: DESCRIPCIÓN DEL NEGOCIO, FOSO Y RIESGOS
+            st.subheader("🏢 Modelo de Negocio, Ventajas y Desventajas")
+            
+            col_desc, col_foso = st.columns([1.2, 1])
+            
+            with col_desc:
+                st.markdown("**¿A qué se dedica la empresa?**")
+                st.write(resumen_negocio)
+                
+            with col_foso:
+                ventajas, desventajas = analizar_foso_y_riesgos(sector, deuda_neta, fcf, margin_ebitda, current_ratio)
+                st.markdown("**Ventajas Competitivas (*Moat*):**")
+                for v in ventajas:
+                    st.write(v)
+                st.markdown("**Desventajas y Riesgos:**")
+                for d in desventajas:
+                    st.write(d)
+
+            st.markdown("---")
+
+            # SECCIÓN 4: SEMÁFORO BUFFETT
+            st.subheader("🚦 El Semáforo Buffett (Calidad y Solvencia)")
             c1, c2, c3, c4 = st.columns(4)
 
-            # 1. PER
             with c1:
                 st.markdown("**1. Valoración (PER)**")
                 if per_ttm and 0 < per_ttm <= 12.0:
@@ -152,7 +176,6 @@ if ticker_input:
                 else:
                     st.error("❌ PER Negativo (Pérdidas)")
 
-            # 2. Deuda Neta
             with c2:
                 st.markdown("**2. Endeudamiento**")
                 if deuda_neta <= 0:
@@ -160,7 +183,6 @@ if ticker_input:
                 else:
                     st.warning(f"⚠️ Deuda Neta: ${deuda_neta:.1f}M")
 
-            # 3. Liquidez
             with c3:
                 st.markdown("**3. Test Liquidez**")
                 if current_ratio and current_ratio >= 1.5:
@@ -170,7 +192,6 @@ if ticker_input:
                 else:
                     st.info("ℹ️ No aplica")
 
-            # 4. FCF
             with c4:
                 st.markdown("**4. Caja Libre (FCF)**")
                 if fcf > 0:
@@ -180,7 +201,7 @@ if ticker_input:
 
             st.markdown("---")
 
-            # Pestañas de gráficos
+            # SECCIÓN 5: GRÁFICOS Y HISTORIAL
             tab_divs, tab_precios, tab_detalles = st.tabs(["💰 Dividendos", "📈 Gráfico 5 Años", "📑 Balance"])
 
             with tab_divs:
@@ -197,7 +218,7 @@ if ticker_input:
                             y=df_divs["Dividendo ($)"].head(16),
                             marker_color='#2ca02c'
                         ))
-                        fig.update_layout(title="Últimos pagos (Detecta picos extraordinarios)", height=320)
+                        fig.update_layout(title="Historial de Pagos (Detecta Picos Extraordinarios)", height=320)
                         st.plotly_chart(fig, width='stretch')
                     with g_col2:
                         st.write("Historial reciente:")
@@ -216,8 +237,8 @@ if ticker_input:
                 col_d1, col_d2 = st.columns(2)
                 col_d1.write(f"- **Efectivo en caja:** ${caja_total/1e6:,.2f} M")
                 col_d1.write(f"- **Deuda bruta:** ${deuda_total/1e6:,.2f} M")
-                col_d2.write(f"- **Beneficio por acción (EPS):** ${info.get('trailingEps', 0):.2f}")
-                col_d2.write(f"- **Precio / Valor en libros (P/B):** {info.get('priceToBook', 'N/D')}")
+                col_d2.write(f"- **Beneficio por acción actual (EPS TTM):** ${info.get('trailingEps', 0):.2f}")
+                col_d2.write(f"- **Precio / Valor contable (P/B):** {info.get('priceToBook', 'N/D')}")
 
         except Exception as e:
             st.error(f"No se pudieron cargar datos para '{ticker_input}'. Comprueba el ticker. Error: {e}")
