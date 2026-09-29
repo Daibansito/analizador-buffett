@@ -31,7 +31,7 @@ if col_b2.button("HRTG"):
 if col_b3.button("UVE"):
     ticker_input = "UVE"
 
-@st.cache_data(ttl=3600)
+@st.cache_resource(ttl=3600)
 def obtener_datos(ticker):
     stock = yf.Ticker(ticker)
     info = stock.info
